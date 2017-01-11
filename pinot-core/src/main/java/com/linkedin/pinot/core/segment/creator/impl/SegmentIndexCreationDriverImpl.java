@@ -15,6 +15,9 @@
  */
 package com.linkedin.pinot.core.segment.creator.impl;
 
+import com.linkedin.pinot.core.indexsegment.generator.SegmentVersion;
+import com.linkedin.pinot.core.segment.index.converter.SegmentFormatConverter;
+import com.linkedin.pinot.core.segment.index.converter.SegmentFormatConverterFactory;
 import java.io.DataOutputStream;
 import java.io.File;
 import java.io.FileOutputStream;
@@ -459,9 +462,31 @@ public class SegmentIndexCreationDriverImpl implements SegmentIndexCreationDrive
       }
     }
 
+    convertFormatIfNeeded(segmentOutputDir);
     LOGGER.info("Driver, record read time : {}", totalRecordReadTime);
     LOGGER.info("Driver, stats collector time : {}", totalStatsCollectorTime);
     LOGGER.info("Driver, indexing time : {}", totalIndexTime);
+  }
+
+  // There are 3 options to correctly generate segments to v3 format
+  // 1. Generate v3 directly: This is efficient but v3 index writer needs to know buffer size upfront.
+  // Inverted, star and raw indexes don't have the index size upfront. This is also least flexible approach
+  // if we add more indexes in future.
+  // 2. Hold data in-memory: One way to work around predeclaring sizes in (1) is to allocate "large" buffer (2GB?)
+  // and hold the data in memory and write the buffer at the end. The memory requirement in this case increases linearly
+  // with the number of columns.
+  // 3. Another option is to generate dictionary and fwd indexes in v3 and generate inverted, star and raw indexes in
+  // separate files. Then add those files to v3 index file. This leads to lot of hodgepodge code to
+  // handle multiple segment formats.
+  private void convertFormatIfNeeded(File segmentDirectory)
+      throws Exception {
+    SegmentVersion versionToGenerate = config.getSegmentVersion();
+    if (versionToGenerate.equals(SegmentVersion.v1)) {
+      // v1 by default
+      return;
+    }
+    SegmentFormatConverter converter = SegmentFormatConverterFactory.getConverter(SegmentVersion.v1, SegmentVersion.v3);
+    converter.convert(segmentDirectory);
   }
 
   public ColumnStatistics getColumnStatisticsCollector(final String columnName) throws Exception {
@@ -531,6 +556,14 @@ public class SegmentIndexCreationDriverImpl implements SegmentIndexCreationDrive
    */
   public String getSegmentName() {
     return segmentName;
+  }
+
+  @Override
+  /**
+   * Returns the path of the output directory
+   */
+  public File getOutputDirectory() {
+    return new File(new File(config.getOutDir()), segmentName);
   }
 
   private GenericRow readNextRowSanitized(GenericRow readRow, GenericRow transformedRow) {
