@@ -451,7 +451,7 @@ public class BrokerRequestHandler {
     if (realtimeCompositeFuture != null) {
       numServersQueried += realtimeCompositeFuture.getNumFutures();
       realtimeServerResponseMap =
-          gatherServerResponses(realtimeCompositeFuture, scatterGatherStats, true, realtimeTableName,
+          gatherServerResponses(realtimeCompositeFuture, scatterGatherStats, false, realtimeTableName,
               processingExceptions);
     }
     phaseTimes.addToGatherTime(System.nanoTime() - gatherStartTime);
